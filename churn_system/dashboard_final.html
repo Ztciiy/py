@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>客户流失预警系统</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+  <script>Chart.register(ChartDataLabels);</script>
+  <script src="output/WARNING_DATA.js"></script>
+  <script src="output/AI_DATA.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Microsoft YaHei', '宋体', sans-serif; background: #f4f5f7; color: #18191c; font-size: 13px; }
+
+    .topbar { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: #00a1d6; z-index: 100; display: flex; align-items: center; padding: 0 20px; }
+    .topbar .logo { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: bold; font-size: 16px; }
+
+    .main-wrapper { display: flex; margin-top: 0; min-height: 100vh; }
+    .sidebar { width: 180px; background: #fff; border-right: 1px solid #e3e5e7; padding: 12px 0; position: fixed; top: 48px; bottom: 0; overflow-y: auto; }
+    .sidebar-section { padding: 0 8px; margin-bottom: 16px; }
+    .sidebar-title { font-size: 11px; color: #9499c0; padding: 4px 8px; margin-bottom: 4px; text-transform: uppercase; }
+    .sidebar-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; color: #61666d; font-size: 13px; cursor: pointer; border-left: 3px solid transparent; }
+    .sidebar-item:hover { background: #f4f5f7; color: #18191c; }
+    .sidebar-item.active { background: #e3f2fd; color: #00a1d6; font-weight: bold; border-left-color: #00a1d6; }
+    .sidebar-item i { width: 16px; text-align: center; color: #9499c0; }
+    .sidebar-item.active i { color: #00a1d6; }
+    .sidebar-item .badge { margin-left: auto; background: #ff4d6d; color: #fff; font-size: 11px; padding: 1px 6px; font-weight: bold; }
+
+    .content { flex: 1; margin-left: 180px; padding: 16px 20px; }
+    .page-section { display: none; }
+    .page-section.active { display: block; }
+    .breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #9499c0; margin-bottom: 12px; }
+    .breadcrumb span { color: #18191c; font-weight: bold; }
+
+    .stat-row { display: flex; gap: 12px; margin-bottom: 16px; }
+    .stat-card { flex: 1; background: #fff; border: 1px solid #e3e5e7; border-left: 4px solid #00a1d6; padding: 14px 16px; }
+    .stat-card .stat-label { font-size: 12px; color: #9499c0; margin-bottom: 4px; }
+    .stat-card .stat-value { font-size: 26px; font-weight: bold; color: #18191c; }
+    .stat-card .stat-sub { font-size: 11px; color: #9499c0; margin-top: 2px; }
+    .stat-card.danger { border-left-color: #ff4d6d; }
+    .stat-card.danger .stat-value { color: #ff4d6d; }
+    .stat-card.warning { border-left-color: #f5a623; }
+    .stat-card.warning .stat-value { color: #f5a623; }
+    .stat-card.success { border-left-color: #3ecf8e; }
+    .stat-card.success .stat-value { color: #3ecf8e; }
+
+    .panel { background: #fff; border: 1px solid #e3e5e7; margin-bottom: 16px; }
+    .panel-header { padding: 10px 16px; background: #f8f9fa; border-bottom: 1px solid #e3e5e7; display: flex; align-items: center; justify-content: space-between; }
+    .panel-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: bold; color: #18191c; }
+    .panel-title i { color: #00a1d6; }
+    .panel-body { padding: 12px 16px; }
+
+    .data-table { width: 100%; border-collapse: collapse; font-size: 12px; background: #fff; }
+    .data-table th { background: #f8f9fa; padding: 10px 8px; text-align: left; font-weight: bold; border: 1px solid #e3e5e7; color: #61666d; white-space: nowrap; }
+    .data-table td { padding: 8px; border: 1px solid #e3e5e7; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .data-table tr:hover { background: #f8f9f9; }
+    .data-table tr:nth-child(even) { background: #fafafa; }
+
+    .level-tag { display: inline-block; padding: 2px 8px; font-size: 11px; font-weight: bold; }
+    .level-tag.danger { background: #fff0f1; color: #ff4d6d; }
+    .level-tag.warning { background: #fff8e6; color: #b36b00; }
+    .level-tag.success { background: #e6faf0; color: #27ae60; }
+
+    .btn { display: inline-flex; align-items: center; gap: 4px; padding: 5px 12px; font-size: 12px; cursor: pointer; border: 1px solid #e3e5e7; background: #fff; color: #61666d; }
+    .btn:hover { background: #f4f5f7; }
+    .btn-primary { background: #00a1d6; color: #fff; border-color: #00a1d6; }
+    .btn-primary:hover { background: #009ac7; }
+
+    .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .chart-container { position: relative; height: 260px; }
+
+    .ai-card { background: #fff; border: 1px solid #e3e5e7; margin-bottom: 12px; }
+    .ai-header { background: #00a1d6; color: #fff; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; }
+    .ai-id { font-weight: bold; font-size: 14px; }
+    .ai-body { padding: 12px 16px; }
+    .ai-section { margin-bottom: 10px; }
+    .ai-section:last-child { margin-bottom: 0; }
+    .ai-section-title { font-weight: bold; color: #00a1d6; font-size: 12px; margin-bottom: 4px; border-bottom: 1px solid #e3e5e7; padding-bottom: 4px; }
+    .ai-section-content { color: #18191c; font-size: 12px; line-height: 1.6; background: #f8f9fa; padding: 8px 12px; }
+    .ai-plan { white-space: pre-wrap; font-size: 12px; line-height: 1.6; }
+
+    .search-box { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .search-input { flex: 1; padding: 8px 12px; border: 1px solid #e3e5e7; font-size: 13px; }
+    .search-input:focus { outline: none; border-color: #00a1d6; }
+
+    .log-panel { background: #1e1e1e; color: #d4d4d4; font-family: 'Consolas', monospace; font-size: 12px; padding: 12px; height: 400px; overflow-y: auto; border: 1px solid #333; }
+    .log-line { padding: 3px 0; border-bottom: 1px solid #333; }
+    .log-time { color: #858585; margin-right: 8px; }
+    .log-tag { padding: 1px 6px; margin-right: 8px; font-size: 11px; background: #264f78; color: #4ec9b0; }
+
+    .empty-state { text-align: center; padding: 40px 20px; color: #9499c0; border: 1px dashed #e3e5e7; }
+    .empty-state i { font-size: 40px; margin-bottom: 12px; opacity: 0.5; }
+
+    .pagination { display: flex; justify-content: center; align-items: center; gap: 4px; margin-top: 12px; }
+    .pagination button { padding: 5px 10px; border: 1px solid #e3e5e7; background: #fff; cursor: pointer; font-size: 12px; }
+    .pagination button:hover { background: #f4f5f7; }
+    .pagination button.active { background: #00a1d6; color: #fff; border-color: #00a1d6; }
+
+    .chart-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 16px; padding: 12px 0; }
+    .chart-card { background: #fff; border: 1px solid #e3e5e7; }
+    .chart-title { padding: 10px 14px; font-weight: bold; color: #18191c; background: #f8f9fa; border-bottom: 1px solid #e3e5e7; font-size: 13px; }
+    .chart-card img { width: 100%; height: auto; display: block; background: #fafafa; }
+
+    .download-list { list-style: none; }
+    .download-list li { padding: 10px 0; border-bottom: 1px solid #e3e5e7; display: flex; justify-content: space-between; align-items: center; }
+    .download-list li:last-child { border-bottom: none; }
+    .download-list .file-name { color: #18191c; }
+    .download-list .file-desc { color: #9499c0; font-size: 11px; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="logo"><i class="fas fa-chart-line"></i> 客户流失预警系统</div>
+  </div>
+
+  <div class="main-wrapper" style="margin-top:48px">
+  <div class="sidebar" style="top:48px">
+    <div class="sidebar-section">
+      <div class="sidebar-title">快捷导航</div>
+      <div class="sidebar-item active" data-tab="dashboard"><i class="fas fa-home"></i> 控制台</div>
+      <div class="sidebar-item" data-tab="warning"><i class="fas fa-bell"></i> 预警管理<span class="badge" id="sidebar-badge" style="display:none">0</span></div>
+      <div class="sidebar-item" data-tab="ai"><i class="fas fa-file-alt"></i> AI策略</div>
+      <div class="sidebar-item" data-tab="charts"><i class="fas fa-chart-area"></i> 图表中心</div>
+      <div class="sidebar-item" data-tab="download"><i class="fas fa-download"></i> 文件下载</div>
+      <div class="sidebar-item" data-tab="export"><i class="fas fa-terminal"></i> 导出日志</div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">系统状态</div>
+      <div class="sidebar-item"><i class="fas fa-check-circle" style="color:#3ecf8e"></i> 服务正常</div>
+      <div class="sidebar-item"><i class="fas fa-database"></i> 数据已加载</div>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- 控制台 -->
+    <div id="page-dashboard" class="page-section active">
+      <div class="breadcrumb"><i class="fas fa-home"></i> <i class="fas fa-chevron-right"></i> <span>控制台</span></div>
+      
+      <div class="stat-row">
+        <div class="stat-card info"><div class="stat-label">客户总数</div><div class="stat-value" id="stat-total">--</div><div class="stat-sub">分析客户数量</div></div>
+        <div class="stat-card danger"><div class="stat-label">高风险客户</div><div class="stat-value" id="stat-high">--</div><div class="stat-sub">需立即关注</div></div>
+        <div class="stat-card warning"><div class="stat-label">中风险客户</div><div class="stat-value" id="stat-medium">--</div><div class="stat-sub">持续监控</div></div>
+        <div class="stat-card success"><div class="stat-label">低风险客户</div><div class="stat-value" id="stat-low">--</div><div class="stat-sub">运行稳定</div></div>
+      </div>
+
+      <div class="chart-grid">
+        <div class="panel"><div class="panel-header"><div class="panel-title"><i class="fas fa-chart-pie"></i> 风险分布</div></div><div class="panel-body"><div class="chart-container"><canvas id="pieChart"></canvas></div></div></div>
+        <div class="panel"><div class="panel-header"><div class="panel-title"><i class="fas fa-chart-bar"></i> 模型性能</div></div><div class="panel-body"><div class="chart-container"><canvas id="barChart"></canvas></div></div></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title"><i class="fas fa-exclamation-circle" style="color:#ff4d6d"></i> 高风险客户预警</div><button class="btn" onclick="switchTab('warning')">查看全部</button></div>
+        <div class="panel-body" style="padding:0">
+          <table class="data-table">
+            <thead><tr><th>序号</th><th>客户ID</th><th>姓名</th><th>流失概率</th><th>风险等级</th><th>合同类型</th><th>付款方式</th><th>月费(元)</th><th>总费用(元)</th><th>流失原因</th></tr></thead>
+            <tbody id="high-risk-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title"><i class="fas fa-file-alt"></i> AI挽留方案概览</div><button class="btn btn-primary" onclick="switchTab('ai')">查看全部</button></div>
+        <div class="panel-body"><div id="dashboard-ai-container"></div></div>
+      </div>
+    </div>
+
+    <!-- 预警管理 -->
+    <div id="page-warning" class="page-section">
+      <div class="breadcrumb"><i class="fas fa-bell"></i> <i class="fas fa-chevron-right"></i> <span>预警管理</span></div>
+      
+      <div class="search-box">
+        <input type="text" class="search-input" id="search-input" placeholder="搜索客户ID、姓名或流失原因...">
+        <span id="search-count" style="color:#61666d;font-size:12px"></span>
+        <button class="btn btn-primary" onclick="exportData()"><i class="fas fa-download"></i> 导出CSV</button>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat-card danger"><div class="stat-label">高风险</div><div class="stat-value" id="w-high">--</div></div>
+        <div class="stat-card warning"><div class="stat-label">中风险</div><div class="stat-value" id="w-medium">--</div></div>
+        <div class="stat-card success"><div class="stat-label">低风险</div><div class="stat-value" id="w-low">--</div></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title"><i class="fas fa-list"></i> 预警客户完整名单 (<span id="pie-total-tag">0</span>)</div></div>
+        <div class="panel-body" style="padding:0">
+          <table class="data-table">
+            <thead><tr><th>序号</th><th>客户ID</th><th>姓名</th><th>合同类型</th><th>付款方式</th><th>月费(元)</th><th>总费用(元)</th><th>流失概率</th><th>风险等级</th><th>流失原因</th></tr></thead>
+            <tbody id="full-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="pagination" id="pagination"></div>
+    </div>
+
+    <!-- AI策略 -->
+    <div id="page-ai" class="page-section">
+      <div class="breadcrumb"><i class="fas fa-file-alt"></i> <i class="fas fa-chevron-right"></i> <span>AI策略</span></div>
+      <div id="ai-container"></div>
+    </div>
+
+    <!-- 图表中心 -->
+    <div id="page-charts" class="page-section">
+      <div class="breadcrumb"><i class="fas fa-chart-area"></i> <i class="fas fa-chevron-right"></i> <span>图表中心</span></div>
+      <div class="chart-gallery" id="chart-gallery"></div>
+    </div>
+
+    <!-- 文件下载 -->
+    <div id="page-download" class="page-section">
+      <div class="breadcrumb"><i class="fas fa-download"></i> <i class="fas fa-chevron-right"></i> <span>文件下载</span></div>
+      
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title"><i class="fas fa-file-csv"></i> 数据文件</div></div>
+        <div class="panel-body">
+          <ul class="download-list" id="download-list"></ul>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title"><i class="fas fa-image"></i> 统计图表（共10张）</div></div>
+        <div class="panel-body">
+          <ul class="download-list">
+            <li><div><div class="file-name">01 流失客户分布</div><div class="file-desc">流失与留存客户占比</div></div><button class="btn btn-primary" onclick="downloadImg('01_churn_distribution.png', '流失客户分布.png')"><i class="fas fa-download"></i> 下载</button></li>
+            <li><div><div class="file-name">02 数值特征分布</div><div class="file-desc">客户数值型特征分布</div></div><button class="btn btn-primary" onclick="downloadImg('02_numerical_features.png', '数值特征分布.png')"><i class="fas fa-download"></i> 下载</button></li>
+            <li><div><div class="file-name">03 类别特征流失率</div><div class="file-desc">各类别特征与流失率关系</div></div><button class="btn btn-primary" onclick="downloadImg('03_categorical_churn_rate.png', '类别特征流失率.png')"><i class="fas fa-download"></i> 下载</button></li>
+            <li><div><div class="file-name">04 特征相关性热力图</div><div class="file-desc">特征间相关性分析</div></div><button class="btn btn-primary" onclick="downloadImg('04_correlation_heatmap.png', '特征相关性热力图.png')"><i class="fas fa-download"></i> 下载</button></li>
+            <li><div><div class="file-name">05 ROC模型评估</div><div class="file-desc">各模型ROC曲线对比</div></div><button class="btn btn-primary" onclick="downloadImg('05_roc_curves.png', 'ROC模型评估.png')"><i class="fas fa-download"></i> 下载</button></li>
+            <li><div><div class="file-name">06 混淆矩阵</div><div class="file-desc">模型预测混淆矩阵</div></div><button class="btn btn-primary" onclick="downloadImg('06_confusion_matrix.png', '混淆矩阵.png')"><i class="fas fa-download"></i> 下载</button></li>
+            <li><div><div class="file-name">07 模型性能对比</div><div class="file-desc">各模型性能指标对比</div></div><button class="btn btn-primary" onclick="downloadImg('07_metrics_comparison.png', '模型性能对比.png')"><i class="fas fa-download"></i> 下载</button></li>
+            <li><div><div class="file-name">08 特征重要性排名</div><div class="file-desc">特征对流失预测贡献度</div></div><button class="btn btn-primary" onclick="downloadImg('08_feature_importance.png', '特征重要性排名.png')"><i class="fas fa-download"></i> 下载</button></li>
+            <li><div><div class="file-name">09 风险等级分布</div><div class="file-desc">高/中/低风险客户分布</div></div><button class="btn btn-primary" onclick="downloadImg('09_risk_distribution.png', '风险等级分布.png')"><i class="fas fa-download"></i> 下载</button></li>
+            <li><div><div class="file-name">10 高风险客户Top10</div><div class="file-desc">风险评分最高的客户</div></div><button class="btn btn-primary" onclick="downloadImg('10_top_risk_customers.png', '高风险客户Top10.png')"><i class="fas fa-download"></i> 下载</button></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- 导出日志 -->
+    <div id="page-export" class="page-section">
+      <div class="breadcrumb"><i class="fas fa-terminal"></i> <i class="fas fa-chevron-right"></i> <span>导出日志</span></div>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title"><i class="fas fa-terminal"></i> 系统运行日志</div><button class="btn" onclick="clearLog()">清空日志</button></div>
+        <div class="panel-body"><div class="log-panel" id="log-panel"></div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let currentPage = 1;
+const pageSize = 20;
+
+function switchTab(tab) {
+  document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active'));
+  document.getElementById('page-' + tab).classList.add('active');
+  document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+  document.querySelector(`.sidebar-item[data-tab="${tab}"]`).classList.add('active');
+}
+
+document.querySelectorAll('.sidebar-item[data-tab]').forEach(el => {
+  el.addEventListener('click', () => switchTab(el.dataset.tab));
+});
+
+function getLevelInfo(level) {
+  if (level === 'HIGH') return ['danger', '高风险'];
+  if (level === 'MEDIUM') return ['warning', '中风险'];
+  return ['success', '低风险'];
+}
+
+function unescape(s) {
+  if (!s) return '';
+  return s.replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+}
+
+function renderDashboard() {
+  if (typeof WARNING_DATA === 'undefined' || !WARNING_DATA || WARNING_DATA.length === 0) {
+    addLog('error', '数据加载失败，请运行 main.py 生成数据');
+    document.getElementById('stat-total').textContent = '无数据';
+    return;
+  }
+  
+  const total = WARNING_DATA.length;
+  const high = WARNING_DATA.filter(r => r.lv === 'HIGH').length;
+  const medium = WARNING_DATA.filter(r => r.lv === 'MEDIUM').length;
+  const low = WARNING_DATA.filter(r => r.lv === 'LOW').length;
+  
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-high').textContent = high;
+  document.getElementById('stat-medium').textContent = medium;
+  document.getElementById('stat-low').textContent = low;
+  document.getElementById('sidebar-badge').textContent = high;
+  document.getElementById('sidebar-badge').style.display = high > 0 ? 'block' : 'none';
+  document.getElementById('w-high').textContent = high;
+  document.getElementById('w-medium').textContent = medium;
+  document.getElementById('w-low').textContent = low;
+  document.getElementById('pie-total-tag').textContent = total;
+
+  new Chart(document.getElementById('pieChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['高风险', '中风险', '低风险'],
+      datasets: [{ data: [high, medium, low], backgroundColor: ['#ff4d6d', '#f5a623', '#3ecf8e'] }]
+    },
+    options: {
+      responsive: true,
+      events: [],
+      hover: { mode: null },
+      animation: { duration: 0 },
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: { enabled: false },
+        datalabels: {
+          color: '#fff',
+          font: { size: 14, weight: 'bold' },
+          formatter: (value, ctx) => {
+            let pct = (value / total * 100).toFixed(1) + '%';
+            return value + '\n' + pct;
+          }
+        }
+      }
+    }
+  });
+
+  new Chart(document.getElementById('barChart'), {
+    type: 'bar',
+    data: {
+      labels: ['逻辑回归\n(LR)', '随机森林\n(RF)', '梯度提升\n(GBDT)'],
+      datasets: [{ label: 'AUC', data: [0.8422, 0.8437, 0.8397], backgroundColor: ['#00a1d6', '#009ac7', '#008bb8'] }]
+    },
+    options: {
+      responsive: true,
+      events: [],
+      hover: { mode: null },
+      animation: { duration: 0 },
+      plugins: {
+        legend: { display: false },
+        tooltip: { enabled: false },
+        datalabels: {
+          color: '#333',
+          font: { size: 12, weight: 'bold' },
+          anchor: 'end',
+          align: 'top',
+          formatter: (value) => value.toFixed(4)
+        }
+      },
+      scales: { y: { min: 0.8, max: 0.9, title: { display: true, text: 'AUC分数' } } }
+    }
+  });
+
+  const highRisk = WARNING_DATA.filter(r => r.lv === 'HIGH').slice(0, 10);
+  const tbody = document.getElementById('high-risk-tbody');
+  tbody.innerHTML = highRisk.map((r, i) => {
+    const [cls, label] = getLevelInfo(r.lv);
+    return `<tr>
+      <td>${i + 1}</td>
+      <td>${r.id || '-'}</td>
+      <td>${r.n || '-'}</td>
+      <td>${((r.prob || 0) * 100).toFixed(1)}%</td>
+      <td><span class="level-tag ${cls}">${label}</span></td>
+      <td>${r.ct || '-'}</td>
+      <td>${r.pm || '-'}</td>
+      <td>${r.m || '-'}</td>
+      <td>${r.t || '-'}</td>
+      <td title="${unescape(r.rs)}">${r.rs ? unescape(r.rs).substring(0, 30) + '...' : '-'}</td>
+    </tr>`;
+  }).join('');
+
+  renderDashboardAI();
+}
+
+function renderDashboardAI() {
+  if (typeof AI_DATA === 'undefined' || !AI_DATA || AI_DATA.length === 0) {
+    document.getElementById('dashboard-ai-container').innerHTML = '<div class="empty-state"><i class="fas fa-file-alt"></i><p>暂无AI挽留方案</p></div>';
+    return;
+  }
+  const container = document.getElementById('dashboard-ai-container');
+  const top3 = AI_DATA.slice(0, 3);
+  container.innerHTML = top3.map(ai => `
+    <div class="ai-card">
+      <div class="ai-header">
+        <span class="ai-id">${ai.rk || 0}. ${ai.id || '客户'}</span>
+        <span>流失概率: ${((ai.prob || 0) * 100).toFixed(1)}%</span>
+      </div>
+      <div class="ai-body">
+        <div class="ai-section">
+          <div class="ai-section-title">流失原因</div>
+          <div class="ai-section-content">${unescape(ai.rs) || '暂无'}</div>
+        </div>
+        <div class="ai-section">
+          <div class="ai-section-title">挽留方案</div>
+          <div class="ai-plan">${unescape(ai.pl) || '暂无'}</div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderFullTable() {
+  if (typeof WARNING_DATA === 'undefined' || !WARNING_DATA) return;
+  
+  const search = document.getElementById('search-input').value.toLowerCase();
+  let filtered = WARNING_DATA;
+  if (search) {
+    filtered = WARNING_DATA.filter(r =>
+      (r.id && r.id.toLowerCase().includes(search)) ||
+      (r.n && r.n.toLowerCase().includes(search)) ||
+      (r.rs && unescape(r.rs).toLowerCase().includes(search))
+    );
+  }
+  
+  document.getElementById('search-count').textContent = `共 ${filtered.length} 条`;
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  const start = (currentPage - 1) * pageSize;
+  const pageData = filtered.slice(start, start + pageSize);
+  
+  const tbody = document.getElementById('full-tbody');
+  tbody.innerHTML = pageData.map((r, i) => {
+    const [cls, label] = getLevelInfo(r.lv);
+    return `<tr>
+      <td>${start + i + 1}</td>
+      <td>${r.id || '-'}</td>
+      <td>${r.n || '-'}</td>
+      <td>${r.ct || '-'}</td>
+      <td>${r.pm || '-'}</td>
+      <td>${r.m || '-'}</td>
+      <td>${r.t || '-'}</td>
+      <td>${((r.prob || 0) * 100).toFixed(1)}%</td>
+      <td><span class="level-tag ${cls}">${label}</span></td>
+      <td title="${unescape(r.rs)}">${r.rs ? unescape(r.rs).substring(0, 40) + '...' : '-'}</td>
+    </tr>`;
+  }).join('');
+  
+  renderPagination(totalPages);
+}
+
+function renderPagination(total) {
+  const pg = document.getElementById('pagination');
+  if (total <= 1) { pg.innerHTML = ''; return; }
+  let html = `<button ${currentPage === 1 ? 'disabled' : ''} onclick="goPage(${currentPage - 1})">上一页</button>`;
+  for (let i = 1; i <= total; i++) {
+    if (i === 1 || i === total || (i >= currentPage - 2 && i <= currentPage + 2)) {
+      html += `<button class="${i === currentPage ? 'active' : ''}" onclick="goPage(${i})">${i}</button>`;
+    } else if (i === currentPage - 3 || i === currentPage + 3) {
+      html += '<span style="padding:0 4px;color:#9499c0">...</span>';
+    }
+  }
+  html += `<button ${currentPage === total ? 'disabled' : ''} onclick="goPage(${currentPage + 1})">下一页</button>`;
+  pg.innerHTML = html;
+}
+
+function goPage(p) { currentPage = p; renderFullTable(); }
+document.getElementById('search-input').addEventListener('input', () => { currentPage = 1; renderFullTable(); });
+
+function renderAI() {
+  if (typeof AI_DATA === 'undefined' || !AI_DATA || AI_DATA.length === 0) {
+    document.getElementById('ai-container').innerHTML = '<div class="empty-state"><i class="fas fa-file-alt"></i><p>暂无AI挽留方案</p></div>';
+    return;
+  }
+  const container = document.getElementById('ai-container');
+  container.innerHTML = AI_DATA.map((ai, i) => `
+    <div class="ai-card">
+      <div class="ai-header">
+        <span class="ai-id">${ai.rk || (i + 1)}. ${ai.id || '客户'}</span>
+        <span>流失概率: ${((ai.prob || 0) * 100).toFixed(1)}%</span>
+      </div>
+      <div class="ai-body">
+        <div class="ai-section">
+          <div class="ai-section-title">流失原因</div>
+          <div class="ai-section-content">${unescape(ai.rs) || '暂无'}</div>
+        </div>
+        <div class="ai-section">
+          <div class="ai-section-title">挽留方案</div>
+          <div class="ai-plan">${unescape(ai.pl) || '暂无'}</div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderCharts() {
+  const gallery = document.getElementById('chart-gallery');
+  const charts = [
+    { name: '流失客户分布', file: '01_churn_distribution.png' },
+    { name: '数值特征分布', file: '02_numerical_features.png' },
+    { name: '类别特征流失率', file: '03_categorical_churn_rate.png' },
+    { name: '特征相关性热力图', file: '04_correlation_heatmap.png' },
+    { name: 'ROC模型评估', file: '05_roc_curves.png' },
+    { name: '混淆矩阵', file: '06_confusion_matrix.png' },
+    { name: '模型性能对比', file: '07_metrics_comparison.png' },
+    { name: '特征重要性排名', file: '08_feature_importance.png' },
+    { name: '风险等级分布', file: '09_risk_distribution.png' },
+    { name: '高风险客户Top10', file: '10_top_risk_customers.png' }
+  ];
+  gallery.innerHTML = charts.map(c => `
+    <div class="chart-card">
+      <div class="chart-title">${c.name}</div>
+      <img src="output/${c.file}?v=${Date.now()}" alt="${c.name}" onerror="this.outerHTML='<div style=\\'padding:40px;text-align:center;color:#9499c0\\'>图片加载失败: ${c.name}</div>'">
+    </div>
+  `).join('');
+}
+
+function initDownloadList() {
+  const list = document.getElementById('download-list');
+  if (!list) return;
+  list.innerHTML = `
+    <li>
+      <div><div class="file-name">完整预警名单.csv</div><div class="file-desc">所有客户（共<span id="total-count">0</span>条）的预警信息</div></div>
+      <button class="btn btn-primary" onclick="exportAllWarning()"><i class="fas fa-download"></i> 导出</button>
+    </li>
+    <li>
+      <div><div class="file-name">高风险客户.csv</div><div class="file-desc">高风险客户（共<span id="high-count">0</span>条）详细预警信息</div></div>
+      <button class="btn btn-primary" onclick="exportHighRisk()"><i class="fas fa-download"></i> 导出</button>
+    </li>
+    <li>
+      <div><div class="file-name">AI挽留方案_TOP10.csv</div><div class="file-desc">TOP 10高风险客户的AI定制挽留方案</div></div>
+      <button class="btn btn-primary" onclick="exportAIData()"><i class="fas fa-download"></i> 导出</button>
+    </li>
+  `;
+  // 更新数量
+  if (typeof WARNING_DATA !== 'undefined') {
+    const high = WARNING_DATA.filter(r => r.lv === 'HIGH').length;
+    const total = WARNING_DATA.length;
+    const totalSpan = document.getElementById('total-count');
+    const highSpan = document.getElementById('high-count');
+    if (totalSpan) totalSpan.textContent = total;
+    if (highSpan) highSpan.textContent = high;
+  }
+}
+
+function exportAllWarning() {
+  if (typeof WARNING_DATA === 'undefined' || !WARNING_DATA) {
+    addLog('error', '无数据可导出');
+    return;
+  }
+  const headers = ['客户ID', '姓名', '合同类型', '付款方式', '月费', '总费用', '流失概率(%)', '风险等级', '流失原因'];
+  const rows = WARNING_DATA.map((r, i) => {
+    const [_, label] = getLevelInfo(r.lv);
+    return [r.id || '', r.n || '', r.ct || '', r.pm || '', r.m || '', r.t || '', ((r.prob || 0) * 100).toFixed(1), label, unescape(r.rs)];
+  });
+  downloadCSV(headers, rows, '预警名单_全部.csv');
+  addLog('success', '导出完成: 预警名单_全部.csv (' + WARNING_DATA.length + '条)');
+}
+
+function exportHighRisk() {
+  if (typeof WARNING_DATA === 'undefined' || !WARNING_DATA) {
+    addLog('error', '无数据可导出');
+    return;
+  }
+  const highRisk = WARNING_DATA.filter(r => r.lv === 'HIGH');
+  if (highRisk.length === 0) {
+    addLog('warn', '无高风险客户数据');
+    return;
+  }
+  const headers = ['客户ID', '姓名', '合同类型', '付款方式', '月费', '总费用', '流失概率(%)', '风险等级', '流失原因'];
+  const rows = highRisk.map((r, i) => {
+    return [r.id || '', r.n || '', r.ct || '', r.pm || '', r.m || '', r.t || '', ((r.prob || 0) * 100).toFixed(1), '高风险', unescape(r.rs)];
+  });
+  downloadCSV(headers, rows, '高风险客户.csv');
+  addLog('success', '导出完成: 高风险客户.csv (' + highRisk.length + '条)');
+}
+
+function exportAIData() {
+  if (typeof AI_DATA === 'undefined' || !AI_DATA || AI_DATA.length === 0) {
+    addLog('error', '无AI数据可导出');
+    return;
+  }
+  const headers = ['排名', '客户ID', '流失概率(%)', '合同类型', '流失原因', 'AI挽留方案'];
+  const rows = AI_DATA.map((r, i) => [r.rk || (i+1), r.id || '', ((r.prob||0)*100).toFixed(1), r.ct || '', unescape(r.rs||''), unescape(r.pl||'')]);
+  downloadCSV(headers, rows, 'AI挽留方案_TOP10.csv');
+  addLog('success', '导出完成: AI挽留方案_TOP10.csv (' + AI_DATA.length + '条)');
+}
+
+function downloadCSV(headers, rows, filename) {
+  const csv = [headers, ...rows].map(r => r.map(v => `"${(v+'').replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadImg(file, name) {
+  const a = document.createElement('a');
+  a.href = 'output/' + file;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  addLog('success', '下载图片: ' + name);
+}
+
+function downloadFile(url, filename, isJs) {
+  if (isJs) {
+    // 导出 AI_DATA.js 中的内容为 CSV
+    if (typeof AI_DATA !== 'undefined' && AI_DATA) {
+      const headers = ['排名', '客户ID', '流失概率', '流失原因', '挽留方案'];
+      const rows = AI_DATA.map((r, i) => [r.rk || (i+1), r.id || '', (r.prob||0)*100+'%', unescape(r.rs||''), unescape(r.pl||'')]);
+      const csv = [headers, ...rows].map(r => r.map(v => `"${(v+'').replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      addLog('success', '导出成功: ' + filename);
+    }
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  addLog('success', '下载文件: ' + filename);
+}
+
+function exportData() {
+  if (typeof WARNING_DATA === 'undefined' || !WARNING_DATA) {
+    addLog('error', '无数据可导出');
+    return;
+  }
+  const headers = ['序号', '客户ID', '姓名', '合同类型', '付款方式', '月费', '总费用', '流失概率', '风险等级', '流失原因'];
+  const rows = WARNING_DATA.map((r, i) => {
+    const [_, label] = getLevelInfo(r.lv);
+    return [i + 1, r.id || '', r.n || '', r.ct || '', r.pm || '', r.m || '', r.t || '', ((r.prob || 0) * 100).toFixed(1) + '%', label, unescape(r.rs)];
+  });
+  const csv = [headers, ...rows].map(r => r.map(v => `"${(v + '').replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `预警名单_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  addLog('success', '数据已导出: ' + new Date().toISOString().slice(0, 10) + '.csv');
+}
+
+function addLog(type, msg) {
+  const panel = document.getElementById('log-panel');
+  if (!panel) return;
+  const time = new Date().toLocaleTimeString();
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-time">${time}</span><span class="log-tag">${type.toUpperCase()}</span><span>${msg}</span>`;
+  panel.appendChild(line);
+  panel.scrollTop = panel.scrollHeight;
+}
+
+function clearLog() {
+  const panel = document.getElementById('log-panel');
+  if (panel) panel.innerHTML = '';
+}
+
+window.addEventListener('load', () => {
+  addLog('info', '系统启动中...');
+  initDownloadList();
+  renderDashboard();
+  renderFullTable();
+  renderAI();
+  renderCharts();
+  addLog('success', '系统初始化完成');
+  const dataLen = typeof WARNING_DATA !== 'undefined' ? WARNING_DATA.length : 0;
+  addLog('info', '数据加载完成，共 ' + dataLen + ' 条记录');
+  if (typeof AI_DATA !== 'undefined' && AI_DATA && AI_DATA.length > 0) {
+    addLog('info', 'AI挽留方案已加载，共 ' + AI_DATA.length + ' 条');
+  }
+});
+</script>
+</body>
+</html>
